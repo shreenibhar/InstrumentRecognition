@@ -1,4 +1,5 @@
 from __future__ import print_function
+
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.ops import rnn_cell
@@ -26,7 +27,7 @@ class Model:
         loss = seq2seq.sequence_loss_by_example([self.logits],
                                                 [self.output_data],
                                                 [tf.ones([args.batch_size])],
-                                                args.vocab_size)
+                                                args.num_classes)
         self.cost = tf.reduce_mean(loss)
         self.final_state = last_state
         self.lr = tf.Variable(0.0, trainable=False)
@@ -40,18 +41,24 @@ class Model:
         resize_input = np.resize(input_data, (num_batches, self.args.seq_length, self.args.seq_dim))
         predictions = np.zeros((0, self.args.num_classes))
         for i in range(0, len(resize_input), self.args.batch_size):
-            predictions = np.append(
-                sess.run(self.probabilities, feed_dict={self.input_data: resize_input[i:i + self.args.batch_size]}),
-                axis=0)
+            predictions = np.append(predictions,
+                                    sess.run(self.probabilities,
+                                             feed_dict={self.input_data: resize_input[i:i + self.args.batch_size]}),
+                                    axis=0)
         return predictions[:len(input_data)]
 
-    def train_epoch(self, sess, input_data, output_data, lr):
+    def train_epochs(self, sess, input_data, output_data, epoch):
         num_batches = (len(input_data) + self.args.batch_size - 1) // self.args.batch_size
-        resize_input = np.resize(input_data, (num_batches, self.args.seq_length, self.args.seq_dim))
-        resize_output = np.resize(output_data, num_batches)
-        for i in range(0, len(resize_input), self.args.batch_size):
-            _, cost = sess.run([self.train_op, self.cost],
-                               feed_dict={self.input_data: resize_input[i:i + self.args.batch_size],
-                                          self.output_data: resize_output[i:i + self.args.batch_size],
-                                          self.lr: lr})
-            print('batch percentage = %f, batch cost = %f' % (i * 100 / len(resize_input), cost))
+        resize = num_batches * self.args.batch_size
+        resize_input = np.resize(input_data, (resize, self.args.seq_length, self.args.seq_dim))
+        resize_output = np.resize(output_data, resize)
+        saver = tf.train.Saver()
+        for e in range(epoch):
+            for i in range(0, len(resize_input), self.args.batch_size):
+                _, cost = sess.run([self.train_op, self.cost],
+                                   feed_dict={self.input_data: resize_input[i:i + self.args.batch_size],
+                                              self.output_data: resize_output[i:i + self.args.batch_size],
+                                              self.lr: self.args.lr * (self.args.decay ** e)})
+                print('batch percentage = %f, batch cost = %f, epoch = %d' % (i * 100 / len(resize_input), cost, e))
+            saver.save(sess, 'model.ckpt')
+            print('model saved')
