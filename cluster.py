@@ -1,6 +1,10 @@
+from __future__ import print_function
 import argparse
 import numpy as np
 import pickle as pkl
+from data import Data
+import tensorflow as tf
+from model import Model
 
 
 def one_hot(val, num_classes):
@@ -64,16 +68,28 @@ def cluster_predict(label, cluster, predict):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_set_load', type=str, nargs=2,
-                        help='path of label and cluster in each sample',
+    parser.add_argument('--data_set_load', type=str, nargs=3, help='path of data and label and cluster in each sample',
                         required=True)
-    parser.add_argument('--predict_path', type=str, help='path of prediction', required=True)
     parser.add_argument('--save_path', type=str, nargs=2, help='path of label and predict clustered', required=True)
+    parser.add_argument('--hidden', type=int, help='hidden dimension of rnn typically 256', required=True)
+    parser.add_argument('--num_classes', type=int, help='number of classes', required=True)
+    parser.add_argument('--batch_size', type=int, help='batch size typically 128 or 64', required=True)
+    parser.add_argument('--seq_length', type=int, help='sequence length', required=True)
+    parser.add_argument('--seq_dim', type=int, help='sequence dimension', required=True)
+    parser.add_argument('--num_layers', type=int, help='number of layers in rnn typically 2', required=True)
+    parser.add_argument('--lr', type=float, help='initial learning rate typically .002', required=True)
+    parser.add_argument('--decay', type=float, help='decay rate typically .97', required=True)
+    parser.add_argument('--restore', type=str, help='path of saved model', required=True)
     args = parser.parse_args()
-    label = np.load(args.data_set_load[0])
-    cluster = np.load(args.data_set_load[1])
-    predict = np.load(args.predict_path)
-    clustered_label, clustered_predict = cluster_predict(label, cluster, predict)
+    model = Model(args)
+    data = Data('', 22050)
+    data.load(args.data_set_load[0], args.data_set_load[1], args.data_set_load[2])
+    sess = tf.Session()
+    saver = tf.train.Saver()
+    saver.restore(sess, args.restore)
+    print('model loaded')
+    seg_predict = model.predict(sess, data.input_data)
+    clustered_label, clustered_predict = cluster_predict(data.output_data, data.cluster, seg_predict)
     pkl.dump(clustered_label, open(args.save_path[0], 'wb'))
     pkl.dump(clustered_predict, open(args.save_path[1], 'wb'))
 
